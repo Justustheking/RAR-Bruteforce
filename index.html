@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Grundstücksbilder</title>
+<style>
+:root{--bg:#1b1d19;--card:#262922;--text:#ece8dc;--mute:#a9a597;--grass:#6a9a3e;--dirt:#8a5e36;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+html{background:var(--bg)}
+body{margin:0;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);color:var(--text);font:17px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-touch-callout:none}
+header{max-width:900px;margin:0 auto;padding:36px 0 20px;border-bottom:6px solid var(--grass);position:relative}
+header::after{content:"";position:absolute;left:0;right:0;bottom:-14px;height:8px;background:var(--dirt)}
+h1{margin:0;font-size:clamp(2rem,8vw,3.4rem);letter-spacing:-.02em}
+main{max-width:900px;margin:36px auto;display:grid;gap:28px}
+figure{margin:0;background:var(--card);padding:14px;border-radius:6px}
+figcaption{font-weight:700;font-size:1.15rem;margin:0 0 10px}
+figure img{display:block;width:100%;height:auto;border-radius:3px;cursor:zoom-in;-webkit-user-drag:none;user-select:none}
+.leer{color:var(--mute)}
+footer{max-width:900px;margin:0 auto;padding:30px 0 40px}
+button,label.btn{font:inherit;background:var(--grass);color:#10130d;border:0;border-radius:6px;padding:10px 16px;font-weight:700;cursor:pointer;display:inline-block}
+button.leise{background:none;color:var(--mute);font-weight:400;padding:6px 0;text-decoration:underline}
+#ownerBtn{background:var(--card);color:var(--text);border:2px solid var(--dirt);min-height:44px}
+#owner,#login{margin-top:14px;display:none}
+#login input{font:inherit;display:block;width:100%;max-width:340px;margin:0 0 10px;padding:10px;border-radius:6px;border:2px solid var(--dirt);background:var(--card);color:var(--text)}
+#status,#meldung{margin:10px 0 0;color:var(--mute)}
+#box{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;padding:16px;z-index:5}
+#box img{max-width:100%;max-height:100%;-webkit-user-drag:none;user-select:none}
+:focus-visible{outline:3px solid var(--text);outline-offset:2px}
+</style>
+</head>
+<body>
+<header><h1>Grundstücksbilder</h1></header>
+<main id="galerie"></main>
+<footer>
+  <button type="button" id="ownerBtn">Owner-Modus</button>
+  <div id="login">
+    <input id="pw" type="password" placeholder="Passwort" autocomplete="off">
+    <button type="button" id="entsperren">Entsperren</button>
+    <p id="meldung"></p>
+  </div>
+  <div id="owner">
+    <label class="btn">Bilder auswählen und hochladen
+      <input id="datei" type="file" accept="image/*" multiple hidden>
+    </label>
+    <button type="button" class="leise" id="sperren">Sperren</button>
+    <p id="status"></p>
+  </div>
+</footer>
+<div id="box"><img alt=""></div>
+
+<script>
+// >>> HIER DEN GITHUB-TOKEN ZWISCHEN DIE ANFÜHRUNGSZEICHEN EINFÜGEN <<<
+const TOKEN = 'HIER_DEIN_TOKEN';
+const PASSWORT = '404';
+
+const U = location.hostname.split('.')[0];
+const R = location.pathname.split('/')[1] || '';
+const API = 'https://api.github.com/repos/' + U + '/' + R + '/contents/';
+const $ = id => document.getElementById(id);
+
+async function laden(){
+  let liste = [];
+  try {
+    const r = await fetch('images.json?' + Date.now());
+    if (r.ok) liste = await r.json();
+  } catch(e){}
+  const g = $('galerie');
+  g.innerHTML = '';
+  if (!liste.length){
+    g.innerHTML = '<p class="leer">Noch keine Bilder.</p>';
+    return;
+  }
+  liste.forEach((name, i) => {
+    const f = document.createElement('figure');
+    const c = document.createElement('figcaption');
+    c.textContent = 'Bild ' + (i + 1);
+    const img = document.createElement('img');
+    img.src = 'bilder/' + name;
+    img.alt = 'Bild ' + (i + 1);
+    img.loading = 'lazy';
+    img.draggable = false;
+    img.addEventListener('contextmenu', e => e.preventDefault());
+    img.addEventListener('click', () => {
+      $('box').firstElementChild.src = img.src;
+      $('box').style.display = 'flex';
+    });
+    f.append(c, img);
+    g.append(f);
+  });
+}
+$('box').addEventListener('click', () => { $('box').style.display = 'none'; });
+
+// Owner-Modus
+let offen = false, frei = false;
+function ansicht(){
+  $('login').style.display = offen && !frei ? 'block' : 'none';
+  $('owner').style.display = offen && frei ? 'block' : 'none';
+}
+$('ownerBtn').addEventListener('click', () => { offen = !offen; $('meldung').textContent = ''; ansicht(); });
+$('entsperren').addEventListener('click', () => {
+  if ($('pw').value === PASSWORT){ frei = true; $('pw').value = ''; $('meldung').textContent = ''; }
+  else $('meldung').textContent = 'Falsches Passwort.';
+  ansicht();
+});
+$('sperren').addEventListener('click', () => { frei = false; $('status').textContent = ''; ansicht(); });
+
+function gh(pfad, methode, body){
+  return fetch(API + pfad, {
+    method: methode,
+    headers: { 'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/vnd.github+json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+}
+
+function verkleinern(file){
+  return new Promise((ok, fehler) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = fehler;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+$('datei').addEventListener('change', async e => {
+  const dateien = [...e.target.files];
+  const st = $('status');
+  if (!dateien.length) return;
+  const neu = [];
+  try {
+    if (TOKEN === 'HIER_DEIN_TOKEN') throw new Error('Der Token fehlt noch in der Datei index.html.');
+    for (let i = 0; i < dateien.length; i++){
+      st.textContent = 'Lade Bild ' + (i + 1) + ' von ' + dateien.length + ' hoch …';
+      const name = 'bild-' + Date.now() + '-' + i + '.jpg';
+      const r = await gh('bilder/' + name, 'PUT', { message: 'Bild hinzufügen', content: await verkleinern(dateien[i]) });
+      if (r.status === 401 || r.status === 403) throw new Error('Der Token ist ungültig, abgelaufen oder gesperrt. Bitte einen neuen Token in die Datei eintragen.');
+      if (!r.ok) throw new Error('Upload fehlgeschlagen (Fehler ' + r.status + ').');
+      neu.push(name);
+    }
+    st.textContent = 'Bildliste wird aktualisiert …';
+    let liste = [], sha;
+    const r = await gh('images.json', 'GET');
+    if (r.ok){
+      const d = await r.json();
+      sha = d.sha;
+      liste = JSON.parse(atob(d.content.replace(/\n/g, '')));
+    }
+    const w = await gh('images.json', 'PUT', {
+      message: 'Bildliste aktualisieren',
+      content: btoa(JSON.stringify(liste.concat(neu))),
+      sha: sha
+    });
+    if (!w.ok) throw new Error('Bildliste konnte nicht gespeichert werden (Fehler ' + w.status + ').');
+    st.textContent = 'Fertig. Die neuen Bilder sind in 1 bis 2 Minuten für alle sichtbar.';
+  } catch(err){
+    st.textContent = err.message || 'Hochladen fehlgeschlagen.';
+  }
+  e.target.value = '';
+});
+
+laden();
+</script>
+</body>
+</html>
